@@ -1,0 +1,30 @@
+Interfaces e Protocolos de Comunicação
+MQTT: Protocolo leve de mensagens publish/subscribe, ideal para IoT.
+
+Broker utilizado: HiveMQ Cloud
+
+Biblioteca: PubSubClient
+
+Tópicos utilizados:
+
+irrigacao/status (publish)
+
+irrigacao/comando (subscribe)
+
+TCP/IP: Comunicação via Wi-Fi integrada do ESP32
+
+Serial (USB): Utilizada apenas durante o desenvolvimento e depuração via IDE Arduino
+
+ Como Funciona
+O sensor de chuva detecta a presença de precipitação.
+
+O ESP32 interpreta o sinal e decide se deve abrir ou fechar a válvula.
+
+O status é publicado no tópico MQTT (irrigacao/status).
+
+O sistema pode também receber comandos manuais via tópico MQTT (irrigacao/comando).
+
+A válvula é acionada ou desativada com base nos dados recebidos.
+
+Todo o processo pode ser monitorado remotamente via MQTT Explorer ou dashboards MQTT.
+

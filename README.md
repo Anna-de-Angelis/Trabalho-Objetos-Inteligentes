@@ -4,7 +4,8 @@ Este projeto tem como objetivo a construção de um sistema de irrigação autom
 
 O projeto foi desenvolvido com foco em aplicações domésticas ou agrícolas de pequeno porte e está alinhado ao ODS 6 da ONU (uso consciente da água).
 
-Funcionalidades
+# Funcionalidades
+
 Detecção de chuva com sensor FC-37 (YL-83)
 
 Controle de irrigação com válvula solenoide de 12V

@@ -1,0 +1,257 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+
+// Configurações de rede WiFi
+const char* ssid = "SEU_WIFI_SSID";
+const char* password = "SUA_SENHA_WIFI";
+
+// Configurações do broker MQTT (HiveMQ Cloud)
+const char* mqtt_server = "broker.hivemq.com";
+const int mqtt_port = 1883;
+const char* mqtt_user = ""; // Deixe vazio para broker público
+const char* mqtt_password = ""; // Deixe vazio para broker público
+
+// Tópicos MQTT
+const char* topic_status = "irrigacao/status";
+const char* topic_sensor = "irrigacao/sensor_chuva";
+const char* topic_valvula = "irrigacao/valvula";
+const char* topic_comando = "irrigacao/comando";
+
+// Pinos do ESP32
+const int SENSOR_CHUVA_POWER = 2;  // Pino para alimentar o sensor
+const int SENSOR_CHUVA_ANALOG = 34; // Pino analógico para leitura do sensor
+const int RELE_VALVULA = 5;        // Pino para controlar o relé da válvula
+
+// Variáveis de controle
+int valorSensorChuva = 0;
+bool chuvaDetectada = false;
+bool valvulaAberta = false;
+bool irrigacaoManual = false;
+unsigned long ultimaLeitura = 0;
+unsigned long ultimoEnvioMQTT = 0;
+
+// Limiar para detecção de chuva (ajustar conforme necessário)
+const int LIMIAR_CHUVA = 500; // Valor abaixo indica presença de chuva
+
+// Intervalos de tempo
+const unsigned long INTERVALO_LEITURA = 5000;  // 5 segundos
+const unsigned long INTERVALO_MQTT = 10000;    // 10 segundos
+
+// Objetos WiFi e MQTT
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Configuração dos pinos
+  pinMode(SENSOR_CHUVA_POWER, OUTPUT);
+  pinMode(RELE_VALVULA, OUTPUT);
+  
+  // Inicializar com válvula fechada
+  digitalWrite(RELE_VALVULA, LOW);
+  digitalWrite(SENSOR_CHUVA_POWER, LOW);
+  
+  Serial.println("=== Sistema de Irrigação Inteligente ===");
+  Serial.println("Iniciando configurações...");
+  
+  // Conectar ao WiFi
+  conectarWiFi();
+  
+  // Configurar MQTT
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callbackMQTT);
+  
+  Serial.println("Sistema inicializado com sucesso!");
+  enviarStatusSistema("Sistema inicializado");
+}
+
+void loop() {
+  // Manter conexão MQTT
+  if (!client.connected()) {
+    reconectarMQTT();
+  }
+  client.loop();
+  
+  unsigned long agora = millis();
+  
+  // Leitura periódica do sensor
+  if (agora - ultimaLeitura >= INTERVALO_LEITURA) {
+    lerSensorChuva();
+    controlarIrrigacao();
+    ultimaLeitura = agora;
+  }
+  
+  // Envio periódico de dados via MQTT
+  if (agora - ultimoEnvioMQTT >= INTERVALO_MQTT) {
+    enviarDadosMQTT();
+    ultimoEnvioMQTT = agora;
+  }
+  
+  delay(100);
+}
+
+void conectarWiFi() {
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando ao WiFi");
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println();
+  Serial.println("WiFi conectado!");
+  Serial.print("Endereço IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconectarMQTT() {
+  while (!client.connected()) {
+    Serial.print("Tentando conexão MQTT...");
+    
+    String clientId = "ESP32Client-";
+    clientId += String(random(0xffff), HEX);
+    
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
+      Serial.println("Conectado ao broker MQTT!");
+      
+      // Subscrever ao tópico de comandos
+      client.subscribe(topic_comando);
+      
+      // Enviar mensagem de conexão
+      enviarStatusSistema("Conectado ao MQTT");
+      
+    } else {
+      Serial.print("Falha na conexão MQTT, rc=");
+      Serial.print(client.state());
+      Serial.println(" Tentando novamente em 5 segundos");
+      delay(5000);
+    }
+  }
+}
+
+void callbackMQTT(char* topic, byte* payload, unsigned int length) {
+  String mensagem = "";
+  for (int i = 0; i < length; i++) {
+    mensagem += (char)payload[i];
+  }
+  
+  Serial.print("Mensagem recebida [");
+  Serial.print(topic);
+  Serial.print("]: ");
+  Serial.println(mensagem);
+  
+  // Processar comandos recebidos
+  if (String(topic) == topic_comando) {
+    processarComando(mensagem);
+  }
+}
+
+void processarComando(String comando) {
+  if (comando == "IRRIGACAO_ON") {
+    irrigacaoManual = true;
+    abrirValvula();
+    enviarStatusSistema("Irrigação manual ativada");
+    
+  } else if (comando == "IRRIGACAO_OFF") {
+    irrigacaoManual = false;
+    fecharValvula();
+    enviarStatusSistema("Irrigação manual desativada");
+    
+  } else if (comando == "AUTO") {
+    irrigacaoManual = false;
+    enviarStatusSistema("Modo automático ativado");
+    
+  } else if (comando == "STATUS") {
+    enviarDadosMQTT();
+  }
+}
+
+void lerSensorChuva() {
+  // Ligar o sensor para economizar energia
+  digitalWrite(SENSOR_CHUVA_POWER, HIGH);
+  delay(100); // Aguardar estabilização
+  
+  // Ler valor analógico
+  valorSensorChuva = analogRead(SENSOR_CHUVA_ANALOG);
+  
+  // Desligar o sensor para economizar energia
+  digitalWrite(SENSOR_CHUVA_POWER, LOW);
+  
+  // Determinar se há chuva
+  chuvaDetectada = (valorSensorChuva < LIMIAR_CHUVA);
+  
+  Serial.print("Sensor de chuva: ");
+  Serial.print(valorSensorChuva);
+  Serial.print(" - ");
+  Serial.println(chuvaDetectada ? "CHUVA DETECTADA" : "SEM CHUVA");
+}
+
+void controlarIrrigacao() {
+  // Se estiver em modo manual, não alterar estado da válvula
+  if (irrigacaoManual) {
+    return;
+  }
+  
+  // Lógica automática: fechar válvula se houver chuva
+  if (chuvaDetectada && valvulaAberta) {
+    fecharValvula();
+    enviarStatusSistema("Irrigação suspensa - chuva detectada");
+    
+  } else if (!chuvaDetectada && !valvulaAberta) {
+    abrirValvula();
+    enviarStatusSistema("Irrigação iniciada - sem chuva");
+  }
+}
+
+void abrirValvula() {
+  digitalWrite(RELE_VALVULA, HIGH);
+  valvulaAberta = true;
+  Serial.println(">>> VÁLVULA ABERTA - Irrigação ATIVA");
+}
+
+void fecharValvula() {
+  digitalWrite(RELE_VALVULA, LOW);
+  valvulaAberta = false;
+  Serial.println(">>> VÁLVULA FECHADA - Irrigação SUSPENSA");
+}
+
+void enviarDadosMQTT() {
+  if (!client.connected()) return;
+  
+  // Criar JSON com dados do sistema
+  StaticJsonDocument<200> doc;
+  doc["timestamp"] = millis();
+  doc["sensor_chuva"] = valorSensorChuva;
+  doc["chuva_detectada"] = chuvaDetectada;
+  doc["valvula_aberta"] = valvulaAberta;
+  doc["modo_manual"] = irrigacaoManual;
+  doc["wifi_rssi"] = WiFi.RSSI();
+  doc["uptime"] = millis() / 1000;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  
+  // Enviar dados para diferentes tópicos
+  client.publish(topic_status, jsonString.c_str());
+  client.publish(topic_sensor, String(valorSensorChuva).c_str());
+  client.publish(topic_valvula, valvulaAberta ? "ABERTA" : "FECHADA");
+  
+  Serial.println("Dados enviados via MQTT: " + jsonString);
+}
+
+void enviarStatusSistema(String mensagem) {
+  if (client.connected()) {
+    StaticJsonDocument<100> doc;
+    doc["timestamp"] = millis();
+    doc["status"] = mensagem;
+    
+    String jsonString;
+    serializeJson(doc, jsonString);
+    
+    client.publish("irrigacao/log", jsonString.c_str());
+    Serial.println("Status: " + mensagem);
+  }
+}

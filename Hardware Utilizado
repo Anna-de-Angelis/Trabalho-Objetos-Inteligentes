@@ -1,4 +1,4 @@
-                                            Hardware Utilizado
+                                      #      Hardware Utilizado
 Componente e Descrição
 ESP32: Microcontrolador com Wi-Fi integrado, responsável pelo controle e comunicação
 Sensor de Chuva FC-37 (YL-83): detecta a presença de gotas de água e envia sinal analógico

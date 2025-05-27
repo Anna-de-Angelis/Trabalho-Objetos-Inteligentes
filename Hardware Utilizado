@@ -1,16 +1,9 @@
-Hardware Utilizado
+                                            Hardware Utilizado
 Componente e Descrição
-ESP32:
- Microcontrolador com Wi-Fi integrado, responsável pelo controle e comunicação
-Sensor de Chuva FC-37 (YL-83):
-Detecta a presença de gotas de água e envia sinal analógico
-Válvula Solenoide 12V (normalmente fechada):
-Controla o fluxo de água na irrigação
-Driver MOSFET IRLZ44N / Módulo relé:
-Aciona a válvula com segurança
-Fonte 12V DC:
-Alimenta a válvula solenoide
-Protoboard e jumpers: 
-Interligação dos componentes
-Diodo 1N4007 e resistores auxiliares:
-Proteção e suporte eletrônico
+ESP32: Microcontrolador com Wi-Fi integrado, responsável pelo controle e comunicação
+Sensor de Chuva FC-37 (YL-83): detecta a presença de gotas de água e envia sinal analógico
+Válvula Solenoide 12V (normalmente fechada): Controla o fluxo de água na irrigação
+Driver MOSFET IRLZ44N / Módulo relé: Aciona a válvula com segurança
+Fonte 12V DC: Alimenta a válvula solenoide
+Protoboard e jumpers: Interligação dos componentes
+Diodo 1N4007 e resistores auxiliares: Proteção e suporte eletrônico
